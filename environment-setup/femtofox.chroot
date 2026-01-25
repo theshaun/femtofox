@@ -41,6 +41,10 @@ echo "Installing dependencies for meshing-around and meshtastic cli..."
 #pip config set global.extra-index-url https://www.piwheels.org/simple
 pip3 install requests pyephem pytap2 meshtastic pypubsub geopy maidenhead beautifulsoup4 dadjokes schedule wikipedia googlesearch-python pubsub datetime
 
+echo "Installing dependencies for pyMC Repeater"
+DEBIAN_FRONTEND=noninteractive apt-get install -y libffi-dev jq python3-pip python3-rrdtool wget swig build-essential python3-dev
+python3 -m pip install --upgrade pip
+
 if [[ $? -eq 2 ]]; then echo "Error, step failed..."; fi
 
 echo "Downloading ttyd and enabling service..."
