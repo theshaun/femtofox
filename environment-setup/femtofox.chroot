@@ -155,9 +155,6 @@ fi
 
 python3 -m pip install --break-system-packages --force-reinstall --no-cache-dir .
 
-
-
-
 if [[ $? -eq 2 ]]; then echo "Error, step failed..."; fi
 
 echo "Downloading ttyd and enabling service..."
