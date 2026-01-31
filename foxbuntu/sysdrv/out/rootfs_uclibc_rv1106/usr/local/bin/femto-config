@@ -766,20 +766,22 @@ while true; do
     1 "Settings wizard" "" \
     2 "Networking" "" \
     3 "Meshtastic" "" \
-    4 "Software manager" "" \
-    5 "Utilities & tools" "" \
-    6 "Help" "" \
+    4 "pyMC Repeater (Meshcore)" "" \
+    5 "Software manager" "" \
+    6 "Utilities & tools" "" \
+    7 "Help" "" \
     " " "" "" \
-    7 "Exit" "" 3>&1 1>&2 2>&3)
+    8 "Exit" "" 3>&1 1>&2 2>&3)
   [ $? -eq 1 ] && break # Exit the loop if the user selects "Cancel" or closes the dialog
   case $main_menu_choice in
     1) femto-install-wizard.sh ;;
     2) networking_settings ;;
     3) meshtastic_settings ;;
-    4) femto-software.sh ;;
-    5) utilities ;;
-    6) help_menu ;;
-    7) break ;;
+    5) /opt/pymc_repeater/manage.sh ;;
+    5) femto-software.sh ;;
+    6) utilities ;;
+    7) help_menu ;;
+    8) break ;;
   esac
 done
 

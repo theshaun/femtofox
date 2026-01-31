@@ -1,13 +1,6 @@
 echo "Inside chroot environment..."
 echo "tmpfs /run tmpfs rw,nodev,nosuid,size=32M 0 0" | tee -a /etc/fstab
 
-# Temporarily removed for SEGFAULT fix done after upgrade below.
-#echo "Installing Meshtastic..."
-
-#wget -qO- https://meshtastic.github.io/meshtastic-deb.asc | tee /etc/apt/keyrings/meshtastic-deb.asc >/dev/null
-#if [[ $? -eq 2 ]]; then echo "Error, step failed..."; fi
-#echo "deb [arch=all signed-by=/etc/apt/keyrings/meshtastic-deb.asc] https://meshtastic.github.io/deb stable main" | tee /etc/apt/sources.list.d/meshtastic-deb.list >/dev/null
-
 echo "Removing netdevice rules..."
 ln -s /dev/null /etc/udev/rules.d/80-net-setup-link.rules
 
@@ -32,11 +25,6 @@ echo "Adding Meshtastic repository and installing meshtastic..."
 add-apt-repository -y ppa:meshtastic/beta
 DEBIAN_FRONTEND=noninteractive apt install -y --option Dpkg::Options::="--force-confold" meshtasticd
 
-# Tempfix for SEGFAULT
-#wget https://github.com/meshtastic/firmware/releases/download/v2.5.11.8e2a3e5/meshtasticd_2.5.11.8e2a3e5_armhf.deb
-#DEBIAN_FRONTEND=noninteractive apt install -y --option Dpkg::Options::="--force-confold" ./meshtasticd_2.5.11.8e2a3e5_armhf.deb
-#rm ./meshtasticd_2.5.11.8e2a3e5_armhf.deb
-
 echo "Installing dependencies for meshing-around and meshtastic cli..."
 #pip config set global.extra-index-url https://www.piwheels.org/simple
 pip3 install requests pyephem pytap2 meshtastic pypubsub geopy maidenhead beautifulsoup4 dadjokes schedule wikipedia googlesearch-python pubsub datetime
@@ -44,6 +32,131 @@ pip3 install requests pyephem pytap2 meshtastic pypubsub geopy maidenhead beauti
 echo "Installing dependencies for pyMC Repeater"
 DEBIAN_FRONTEND=noninteractive apt-get install -y libffi-dev jq python3-pip python3-rrdtool wget swig build-essential python3-dev
 python3 -m pip install --upgrade pip
+python3 -m pip install setuptools_scm
+
+echo "Installing pyMC Repeater"
+git clone --single-branch --branch dev https://github.com/theshaun/pyMC_Repeater.git /temp/pymc_repeater_install
+cd /temp/pymc_repeater_install
+
+PYMC_SCRIPT_DIR="/temp/pymc_repeater_install"
+PYMC_INSTALL_DIR="/opt/pymc_repeater"
+PYMC_CONFIG_DIR="/etc/pymc_repeater"
+PYMC_LOG_DIR="/var/log/pymc_repeater"
+PYMC_SERVICE_USER="repeater"
+PYMC_SERVICE_NAME="pymc-repeater"
+
+
+echo "# Creating service user..."
+useradd --system --home /var/lib/pymc_repeater --shell /sbin/nologin "$PYMC_SERVICE_USER"
+
+echo "# Adding user to hardware groups..."
+usermod -a -G gpio,i2c,spi "$PYMC_SERVICE_USER" 2>/dev/null || true
+usermod -a -G dialout "$PYMC_SERVICE_USER" 2>/dev/null || true
+
+echo "# Creating directories..."
+mkdir -p "$PYMC_INSTALL_DIR" "$PYMC_CONFIG_DIR" "$PYMC_LOG_DIR" /var/lib/pymc_repeater
+
+# Install mikefarah yq v4 if not already installed
+if ! command -v yq &> /dev/null || [[ "$(yq --version 2>&1)" != *"mikefarah/yq"* ]]; then
+    wget -qO /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_arm" && chmod +x /usr/local/bin/yq
+fi
+
+echo "# Generating version file..."
+cd "$SCRIPT_DIR"
+# Generate version file using setuptools_scm before copying
+if [ -d .git ]; then
+    git fetch --tags 2>/dev/null || true
+    # Write the version file that will be copied
+    GENERATED_VERSION=$(python3 -m setuptools_scm 2>&1 || echo "unknown (setuptools_scm not available)")
+    python3 -c "from setuptools_scm import get_version; get_version(write_to='repeater/_version.py')" 2>&1 || echo "    Warning: Could not generate _version.py file"
+    echo "    Generated version: $GENERATED_VERSION"
+fi
+
+# Clean up stale bytecode in source directory before copying
+find "$PYMC_SCRIPT_DIR/repeater" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+find "$PYMC_SCRIPT_DIR/repeater" -type f -name '*.pyc' -delete 2>/dev/null || true
+
+echo "# Cleaning old installation files..."
+# Remove old repeater directory to ensure clean install
+rm -rf "$PYMC_INSTALL_DIR/repeater" 2>/dev/null || true
+# Clean up old Python bytecode
+find "$PYMC_INSTALL_DIR" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+find "$PYMC_INSTALL_DIR" -type f -name '*.pyc' -delete 2>/dev/null || true
+
+echo "# Installing files..."
+cp -r "$PYMC_SCRIPT_DIR/repeater" "$PYMC_INSTALL_DIR/"
+cp "$PYMC_SCRIPT_DIR/pyproject.toml" "$PYMC_INSTALL_DIR/"
+cp "$PYMC_SCRIPT_DIR/README.md" "$PYMC_INSTALL_DIR/"
+cp "$PYMC_SCRIPT_DIR/manage.sh" "$PYMC_INSTALL_DIR/" 2>/dev/null || true
+cp "$PYMC_SCRIPT_DIR/pymc-repeater.service" "$PYMC_INSTALL_DIR/" 2>/dev/null || true
+cp "$PYMC_SCRIPT_DIR/radio-settings.json" /var/lib/pymc_repeater/ 2>/dev/null || true
+cp "$PYMC_SCRIPT_DIR/radio-presets.json" /var/lib/pymc_repeater/ 2>/dev/null || true
+
+echo "# Installing configuration..."
+cp "$PYMC_SCRIPT_DIR/config.yaml.example" "$PYMC_CONFIG_DIR/config.yaml.example"
+if [ ! -f "$PYMC_CONFIG_DIR/config.yaml" ]; then
+    cp "$PYMC_SCRIPT_DIR/config.yaml.example" "$PYMC_CONFIG_DIR/config.yaml"
+fi
+
+echo "# Setting default configuration to femtofox..."
+PYMC_CONFIG_FILE="$PYMC_CONFIG_DIR/config.yaml"
+
+sed -i "s/^  cs_pin:.*/  cs_pin: 16/" "$PYMC_CONFIG_FILE"
+sed -i "s/^  reset_pin:.*/  reset_pin: 25/" "$PYMC_CONFIG_FILE"
+sed -i "s/^  busy_pin:.*/  busy_pin: 22/" "$PYMC_CONFIG_FILE"
+sed -i "s/^  irq_pin:.*/  irq_pin: 23/" "$PYMC_CONFIG_FILE"
+sed -i "s/^  rxen_pin:.*/  rxen_pin: 24/" "$PYMC_CONFIG_FILE"
+sed -i "/^  cs_pin:.*/a\\  gpio_chip: 1" "$PYMC_CONFIG_FILE"
+sed -i "/^  gpio_chip:.*/a\\  use_gpiod_backend: true" "$PYMC_CONFIG_FILE"
+sed -i "s/^  tx_power:.*/  tx_power: 30/" "$PYMC_CONFIG_FILE"
+
+echo "# Installing systemd service..."
+cp "$PYMC_SCRIPT_DIR/pymc-repeater.service" /etc/systemd/system/
+systemctl daemon-reload
+
+echo "# Setting permissions..."
+chown -R "$PYMC_SERVICE_USER:$PYMC_SERVICE_USER" "$PYMC_INSTALL_DIR" "$PYMC_CONFIG_DIR" "$PYMC_LOG_DIR" /var/lib/pymc_repeater
+chmod 750 "$PYMC_CONFIG_DIR" "$PYMC_LOG_DIR" /var/lib/pymc_repeater
+# Ensure the service user can create subdirectories in their home directory
+chmod 755 /var/lib/pymc_repeater
+# Pre-create the .config directory that the service will need
+mkdir -p /var/lib/pymc_repeater/.config/pymc_repeater
+chown -R "$PYMC_SERVICE_USER:$PYMC_SERVICE_USER" /var/lib/pymc_repeater/.config
+
+# Configure polkit for passwordless service restart
+mkdir -p /etc/polkit-1/rules.d
+cat > /etc/polkit-1/rules.d/10-pymc-repeater.rules <<'EOF'
+polkit.addRule(function(action, subject) {
+if (action.id == "org.freedesktop.systemd1.manage-units" &&
+    action.lookup("unit") == "pymc-repeater.service" &&
+    subject.user == "repeater") {
+    return polkit.Result.YES;
+}
+});
+EOF
+chmod 0644 /etc/polkit-1/rules.d/10-pymc-repeater.rules
+
+echo "# Installing more Python dependencies..."
+
+cd "$PYMC_SCRIPT_DIR"
+
+# Suppress pip root user warnings
+export PIP_ROOT_USER_ACTION=ignore
+
+# Calculate version from git for setuptools_scm
+if [ -d .git ]; then
+    git fetch --tags 2>/dev/null || true
+    GIT_VERSION=$(python3 -m setuptools_scm 2>/dev/null || echo "1.0.5")
+    export SETUPTOOLS_SCM_PRETEND_VERSION="$GIT_VERSION"
+    echo "Installing version: $GIT_VERSION"
+else
+    export SETUPTOOLS_SCM_PRETEND_VERSION="1.0.5"
+fi
+
+python3 -m pip install --break-system-packages --force-reinstall --no-cache-dir .
+
+
+
 
 if [[ $? -eq 2 ]]; then echo "Error, step failed..."; fi
 
