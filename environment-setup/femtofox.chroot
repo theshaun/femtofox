@@ -35,7 +35,7 @@ python3 -m pip install --upgrade pip
 python3 -m pip install setuptools_scm
 
 echo "Installing pyMC Repeater"
-git clone --single-branch --branch dev https://github.com/theshaun/pyMC_Repeater.git /temp/pymc_repeater_install
+git clone --single-branch --branch feat/newRadios https://github.com/rightup/pyMC_Repeater.git /temp/pymc_repeater_install
 cd /temp/pymc_repeater_install
 
 PYMC_SCRIPT_DIR="/temp/pymc_repeater_install"
@@ -238,7 +238,9 @@ ldconfig
 # Back up libc_nonshared.a because build.sh removes it
 cp /usr/lib/arm-linux-gnueabihf/libc_nonshared.a /usr/lib/arm-linux-gnueabihf/libc_nonshared.a.keep
 
+chmod +x /usr/local/bin/*
+
 echo "Cleaning up chroot..."
 rm -rf /tmp/* && rm -rf /var/tmp/* && find /var/log -type f -exec truncate -s 0 {} + && : > /root/.bash_history && history -c
 
-exit
+exit 0

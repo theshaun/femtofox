@@ -777,7 +777,7 @@ while true; do
     1) femto-install-wizard.sh ;;
     2) networking_settings ;;
     3) meshtastic_settings ;;
-    5) /opt/pymc_repeater/manage.sh ;;
+    4) /opt/pymc_repeater/manage.sh ;;
     5) femto-software.sh ;;
     6) utilities ;;
     7) help_menu ;;
