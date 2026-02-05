@@ -35,10 +35,10 @@ python3 -m pip install --upgrade pip
 python3 -m pip install setuptools_scm
 
 echo "Installing pyMC Repeater"
-git clone --single-branch --branch feat/newRadios https://github.com/rightup/pyMC_Repeater.git /temp/pymc_repeater_install
-cd /temp/pymc_repeater_install
+git clone --single-branch --branch feat/newRadios https://github.com/rightup/pyMC_Repeater.git /tmp/pymc_repeater_install
+cd /tmp/pymc_repeater_install
 
-PYMC_SCRIPT_DIR="/temp/pymc_repeater_install"
+PYMC_SCRIPT_DIR="/tmp/pymc_repeater_install"
 PYMC_INSTALL_DIR="/opt/pymc_repeater"
 PYMC_CONFIG_DIR="/etc/pymc_repeater"
 PYMC_LOG_DIR="/var/log/pymc_repeater"
@@ -124,17 +124,16 @@ mkdir -p /var/lib/pymc_repeater/.config/pymc_repeater
 chown -R "$PYMC_SERVICE_USER:$PYMC_SERVICE_USER" /var/lib/pymc_repeater/.config
 
 # Configure polkit for passwordless service restart
-mkdir -p /etc/polkit-1/rules.d
-cat > /etc/polkit-1/rules.d/10-pymc-repeater.rules <<'EOF'
-polkit.addRule(function(action, subject) {
-if (action.id == "org.freedesktop.systemd1.manage-units" &&
-    action.lookup("unit") == "pymc-repeater.service" &&
-    subject.user == "repeater") {
-    return polkit.Result.YES;
-}
-});
+mkdir -p /etc/polkit-1/localauthority/50-local.d
+cat > /etc/polkit-1/localauthority/50-local.d/10-pymc-repeater.pkla <<'EOF'
+[Allow repeater to restart pymc-repeater service]
+Identity=unix-user:repeater
+Action=org.freedesktop.systemd1.manage-units
+ResultAny=yes
+ResultInactive=yes
+ResultActive=yes
 EOF
-chmod 0644 /etc/polkit-1/rules.d/10-pymc-repeater.rules
+chmod 0644 /etc/polkit-1/localauthority/50-local.d/10-pymc-repeater.pkla
 
 echo "# Installing more Python dependencies..."
 
@@ -154,6 +153,36 @@ else
 fi
 
 python3 -m pip install --break-system-packages --force-reinstall --no-cache-dir .
+
+
+echo "# Preinstalling pymc_console..."
+git clone https://github.com/dmduran12/pymc_console-dist.git /tmp/pymc_console_install
+cd /tmp/pymc_console_install
+
+PYMC_C_CONFIG_FILE="$PYMC_CONFIG_DIR/config.yaml"
+PYMC_C_TMP_FILE="/tmp/pymc-ui.tar.gz"
+PYMC_C_CONSOLE_DIR="/opt/pymc_console"
+PYMC_C_UI_DIR="$PYMC_C_CONSOLE_DIR/web/html"
+PYMC_C_UI_REPO="dmduran12/pymc_console-dist"
+PYMC_C_UI_RELEASE_URL="https://github.com/${PYMC_C_UI_REPO}/releases"
+
+# Download dashboard
+echo "Downloading dashboard..."
+if ! curl -fsSL -o "$PYMC_C_TMP_FILE" "${PYMC_C_UI_RELEASE_URL}/latest/download/pymc-ui-latest.tar.gz"; then
+    print_error "Download failed"
+    rm -f "$PYMC_C_TMP_FILE"
+    return 1
+fi
+
+# Clean and extract
+mkdir -p "$PYMC_C_UI_DIR"
+tar -xzf "$PYMC_C_TMP_FILE" -C "$PYMC_C_UI_DIR"
+
+# Set permissions
+chown -R repeater:repeater "$PYMC_C_CONSOLE_DIR" 2>/dev/null || true
+
+yq -i '.web //= {}' "$PYMC_C_CONFIG_FILE" 2>/dev/null || true        
+yq -i ".web.web_path = \"$PYMC_C_CONSOLE_DIR\"" "$PYMC_C_CONFIG_FILE"
 
 if [[ $? -eq 2 ]]; then echo "Error, step failed..."; fi
 
