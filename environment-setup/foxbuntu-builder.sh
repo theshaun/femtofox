@@ -311,8 +311,10 @@ create_image() {
       echo "No changes made to rootfs size because it has already been modified."
   fi
 
+  chmod +x /home/${sudoer}/luckfox-pico/sysdrv/tools/pc/uboot_tools/mkenvimage
   /home/${sudoer}/luckfox-pico/sysdrv/tools/pc/uboot_tools/mkenvimage -s 0x8000 -p 0x0 -o env.img .env.txt
 
+  chmod +x /home/${sudoer}/luckfox-pico/output/image/blkenvflash
   /home/${sudoer}/luckfox-pico/output/image/blkenvflash /home/${sudoer}/luckfox-pico/foxbuntu.img
   if [[ $? -eq 2 ]]; then echo "Error, sdcard img failed to build..."; exit 2; else echo "foxbuntu.img build completed."; fi
   ls -la /home/${sudoer}/luckfox-pico/foxbuntu.img
