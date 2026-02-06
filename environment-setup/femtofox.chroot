@@ -181,9 +181,6 @@ tar -xzf "$PYMC_C_TMP_FILE" -C "$PYMC_C_UI_DIR"
 # Set permissions
 chown -R repeater:repeater "$PYMC_C_CONSOLE_DIR" 2>/dev/null || true
 
-yq -i '.web //= {}' "$PYMC_C_CONFIG_FILE" 2>/dev/null || true        
-yq -i ".web.web_path = \"$PYMC_C_CONSOLE_DIR\"" "$PYMC_C_CONFIG_FILE"
-
 if [[ $? -eq 2 ]]; then echo "Error, step failed..."; fi
 
 echo "Downloading ttyd and enabling service..."
