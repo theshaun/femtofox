@@ -1,3 +1,7 @@
+This repository is now archived.
+
+Please see [openhop-femtofox](https://github.com/theshaun/openhop-femtofox) for new openHop Femtofox support
+
 
 
 <img src="assets/images/KSE_side_shot.png" width="750">
